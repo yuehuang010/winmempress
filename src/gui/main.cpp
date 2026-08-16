@@ -40,6 +40,8 @@ struct DialogState {
     bool owns_background_brush = false;
     int sort_column = 1;
     bool sort_ascending = false;
+    HICON icon_big = nullptr;
+    HICON icon_small = nullptr;
 };
 
 std::wstring FormatMemory(std::uint64_t bytes) {
@@ -416,6 +418,22 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         auto* new_state = new DialogState;
         new_state->dialog = dialog;
         new_state->list = GetDlgItem(dialog, IDC_APP_LIST);
+        const HINSTANCE instance = GetModuleHandleW(nullptr);
+        const UINT dpi = GetDpiForWindow(dialog);
+        new_state->icon_big = static_cast<HICON>(
+            LoadImageW(instance, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
+                       GetSystemMetricsForDpi(SM_CXICON, dpi),
+                       GetSystemMetricsForDpi(SM_CYICON, dpi), LR_DEFAULTCOLOR));
+        new_state->icon_small = static_cast<HICON>(
+            LoadImageW(instance, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
+                       GetSystemMetricsForDpi(SM_CXSMICON, dpi),
+                       GetSystemMetricsForDpi(SM_CYSMICON, dpi), LR_DEFAULTCOLOR));
+        if (new_state->icon_big)
+            SendMessageW(dialog, WM_SETICON, ICON_BIG,
+                         reinterpret_cast<LPARAM>(new_state->icon_big));
+        if (new_state->icon_small)
+            SendMessageW(dialog, WM_SETICON, ICON_SMALL,
+                         reinterpret_cast<LPARAM>(new_state->icon_small));
         SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(new_state));
         ListView_SetExtendedListViewStyle(new_state->list,
                                           LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
@@ -532,6 +550,8 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
             StopWorker(dialog, *state);
             if (state->owns_background_brush && state->background_brush)
                 DeleteObject(state->background_brush);
+            if (state->icon_big) DestroyIcon(state->icon_big);
+            if (state->icon_small) DestroyIcon(state->icon_small);
             delete state;
             SetWindowLongPtrW(dialog, DWLP_USER, 0);
         }
