@@ -20,7 +20,6 @@
 namespace {
 constexpr UINT_PTR kRefreshTimer = 1;
 constexpr UINT kRefreshMessage = WM_APP + 1;
-constexpr wchar_t kBackgroundKey[] = L"background";
 
 struct WorkerResult {
     bool success = false;
@@ -139,7 +138,8 @@ void LayoutControls(HWND dialog, DialogState& state) {
 void UpdateEndTaskState(HWND dialog, const DialogState& state) {
     const int selected = ListView_GetNextItem(state.list, -1, LVNI_SELECTED);
     const bool enabled = selected >= 0 && static_cast<std::size_t>(selected) < state.apps.size() &&
-                         state.apps[static_cast<std::size_t>(selected)].key != kBackgroundKey;
+                         state.apps[static_cast<std::size_t>(selected)].key !=
+                             memcore::kBackgroundAppKey;
     EnableWindow(GetDlgItem(dialog, IDC_END_TASK), enabled ? TRUE : FALSE);
 }
 
@@ -198,6 +198,9 @@ void RebuildList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry>
     const int column = state.sort_column;
     const bool ascending = state.sort_ascending;
     std::sort(apps.begin(), apps.end(), [column, ascending](const auto& left, const auto& right) {
+        const bool left_background = left.key == memcore::kBackgroundAppKey;
+        const bool right_background = right.key == memcore::kBackgroundAppKey;
+        if (left_background != right_background) return right_background;
         const int order = CompareApps(left, right, column);
         if (order != 0) return ascending ? order < 0 : order > 0;
         return _wcsicmp(left.display_name.c_str(), right.display_name.c_str()) < 0;
@@ -311,7 +314,7 @@ void EndSelectedTask(HWND dialog, DialogState& state) {
     if (selected < 0 || static_cast<std::size_t>(selected) >= state.apps.size())
         return;
     const auto& app = state.apps[static_cast<std::size_t>(selected)];
-    if (app.key == kBackgroundKey)
+    if (app.key == memcore::kBackgroundAppKey)
         return;
 
     const std::wstring message = L"End " + app.display_name + L"? This will terminate " +

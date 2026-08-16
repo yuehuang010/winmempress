@@ -97,6 +97,9 @@ void Json(const memcore::Snapshot& snapshot, const std::vector<memcore::AppEntry
 void Table(const memcore::Snapshot& snapshot, std::vector<memcore::AppEntry> apps,
            const memcore::PressureScore& system) {
     std::sort(apps.begin(), apps.end(), [](const auto& a, const auto& b) {
+        const bool a_background = a.key == memcore::kBackgroundAppKey;
+        const bool b_background = b.key == memcore::kBackgroundAppKey;
+        if (a_background != b_background) return b_background;
         return a.working_set != b.working_set ? a.working_set > b.working_set
                                                : a.display_name < b.display_name;
     });

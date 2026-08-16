@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace memcore {
+inline constexpr wchar_t kBackgroundAppKey[] = L"background";
 enum class PressureBand { Low, Moderate, High, Critical };
 struct PressureScore { int value = 0; PressureBand band = PressureBand::Low; };
 struct ProcessInfo {

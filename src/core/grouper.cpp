@@ -77,7 +77,7 @@ std::vector<AppEntry> GroupProcesses(const Snapshot& snapshot) {
     std::map<std::wstring, std::size_t> group_indexes;
     std::vector<AppEntry> apps;
     const auto background = [&]() {
-        const std::wstring key = L"background";
+        const std::wstring key = kBackgroundAppKey;
         const auto found = group_indexes.find(key);
         if (found != group_indexes.end()) return found->second;
         AppEntry app;
