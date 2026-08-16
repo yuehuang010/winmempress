@@ -1,0 +1,5 @@
+#pragma once
+
+#define IDD_MAIN 101
+#define IDC_APP_LIST 1001
+#define IDC_END_TASK 1002

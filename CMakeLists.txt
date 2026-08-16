@@ -25,3 +25,13 @@ add_executable(winmempress-cli src/cli/main.cpp)
 target_compile_definitions(winmempress-cli PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(winmempress-cli PRIVATE /W4 /permissive- /EHsc)
 target_link_libraries(winmempress-cli PRIVATE memcore)
+
+add_executable(winmempress WIN32
+    src/gui/main.cpp
+    src/gui/app.rc
+    src/gui/resource.h
+)
+target_compile_definitions(winmempress PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(winmempress PRIVATE /W4 /permissive- /EHsc)
+target_link_options(winmempress PRIVATE /MANIFEST:NO)
+target_link_libraries(winmempress PRIVATE memcore comctl32 dwmapi uxtheme)
