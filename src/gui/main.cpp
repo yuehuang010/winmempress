@@ -89,9 +89,11 @@ void ApplyTheme(HWND dialog, DialogState& state) {
     state.owns_background_brush = state.dark;
 
     ApplyTitleBarTheme(dialog, state.dark);
-    const HWND button = GetDlgItem(dialog, IDC_END_TASK);
-    if (button)
-        SetWindowTheme(button, state.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+    for (const int control : {IDC_END_TASK, IDC_PIN_TOPMOST}) {
+        const HWND button = GetDlgItem(dialog, control);
+        if (button)
+            SetWindowTheme(button, state.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+    }
     if (state.list) {
         const COLORREF background = state.dark ? RGB(32, 32, 32) : GetSysColor(COLOR_WINDOW);
         const COLORREF text = state.dark ? RGB(245, 245, 245) : GetSysColor(COLOR_WINDOWTEXT);
@@ -123,6 +125,8 @@ void LayoutControls(HWND dialog, DialogState& state) {
                 client.right - margin, client.bottom - margin};
     MoveWindow(GetDlgItem(dialog, IDC_END_TASK), button.left, button.top,
                button_width, button_height, TRUE);
+    MoveWindow(GetDlgItem(dialog, IDC_PIN_TOPMOST), margin, button.top,
+               ScaleForDpi(70, dpi), button_height, TRUE);
     MoveWindow(state.list, margin, margin, client.right - margin * 2,
                button.top - gap - margin, TRUE);
 
@@ -490,6 +494,12 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
     case WM_COMMAND:
         if (LOWORD(w_param) == IDC_END_TASK && HIWORD(w_param) == BN_CLICKED && state) {
             EndSelectedTask(dialog, *state);
+            return TRUE;
+        }
+        if (LOWORD(w_param) == IDC_PIN_TOPMOST && HIWORD(w_param) == BN_CLICKED) {
+            const bool pinned = IsDlgButtonChecked(dialog, IDC_PIN_TOPMOST) == BST_CHECKED;
+            SetWindowPos(dialog, pinned ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE);
             return TRUE;
         }
         if (LOWORD(w_param) == IDCANCEL) {
