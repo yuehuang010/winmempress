@@ -1,5 +1,9 @@
 build/
+build-x64/
+build-arm64/
 out/
 publish/
+packaging/Assets/
+packaging/out/
 .vs/
 *.user

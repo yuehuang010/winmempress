@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(WinMemPress LANGUAGES CXX)
+project(MemPressMonitor LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,17 +21,17 @@ target_compile_definitions(memcore PUBLIC UNICODE _UNICODE WIN32_LEAN_AND_MEAN N
 target_compile_options(memcore PRIVATE /W4 /permissive- /EHsc)
 target_link_libraries(memcore PUBLIC psapi shell32 version kernel32 user32)
 
-add_executable(winmempress-cli src/cli/main.cpp)
-target_compile_definitions(winmempress-cli PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(winmempress-cli PRIVATE /W4 /permissive- /EHsc)
-target_link_libraries(winmempress-cli PRIVATE memcore)
+add_executable(mempressmonitor-cli src/cli/main.cpp)
+target_compile_definitions(mempressmonitor-cli PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(mempressmonitor-cli PRIVATE /W4 /permissive- /EHsc)
+target_link_libraries(mempressmonitor-cli PRIVATE memcore)
 
-add_executable(winmempress WIN32
+add_executable(mempressmonitor WIN32
     src/gui/main.cpp
     src/gui/app.rc
     src/gui/resource.h
 )
-target_compile_definitions(winmempress PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(winmempress PRIVATE /W4 /permissive- /EHsc)
-target_link_options(winmempress PRIVATE /MANIFEST:NO)
-target_link_libraries(winmempress PRIVATE memcore comctl32 dwmapi uxtheme)
+target_compile_definitions(mempressmonitor PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(mempressmonitor PRIVATE /W4 /permissive- /EHsc)
+target_link_options(mempressmonitor PRIVATE /MANIFEST:NO)
+target_link_libraries(mempressmonitor PRIVATE memcore comctl32 dwmapi uxtheme)

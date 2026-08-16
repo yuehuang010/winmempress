@@ -67,8 +67,8 @@ std::wstring Escape(const std::wstring& value) {
     return result;
 }
 void Help() {
-    wprintf(L"WinMemPress CLI\n\n");
-    wprintf(L"Usage: winmempress-cli [--watch [seconds]] [--json] [--help]\n\n");
+    wprintf(L"MemPressMonitor CLI\n\n");
+    wprintf(L"Usage: mempressmonitor-cli [--watch [seconds]] [--json] [--help]\n\n");
     wprintf(L"  --watch [seconds]  Refresh until Ctrl+C (default interval: 2 seconds)\n");
     wprintf(L"  --json              Emit machine-readable JSON\n");
     wprintf(L"  --help              Show this help\n");

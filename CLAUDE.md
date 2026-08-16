@@ -1,12 +1,20 @@
-# WinMemPress
+# MemPressMonitor
 
 Small pure-Win32 (no .NET) C++20 app showing per-app memory usage and a heuristic memory-pressure score. Architecture, source layout, heuristic, and milestones are in `PLAN.md` — read it before changing code.
 
 ## Structure
 
 - `src/core/` — `memcore` static lib (collector, grouper, pressure engine). No UI, no console output, no `<commctrl.h>` here.
-- `src/cli/` — `winmempress-cli.exe`, table/JSON front-end and the validation harness.
-- `src/gui/` — `winmempress.exe`, Win32 ListView front-end (milestone 3).
+- `src/cli/` — `mempressmonitor-cli.exe`, table/JSON front-end and the validation harness.
+- `src/gui/` — `mempressmonitor.exe`, Win32 ListView front-end (milestone 3).
+- `packaging/` — MSIX manifest for the Microsoft Store. `Assets/` and `out/` are generated and gitignored.
+
+## Store packaging
+
+`tools\package-msix.ps1` builds Release and packs the GUI into an MSIX. Store
+identity values are script parameters, never committed. `store.md` has the
+submission answers and listing copy. Assets come from
+`tools\generate-store-assets.ps1`.
 
 ## Build
 

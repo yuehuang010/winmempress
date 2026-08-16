@@ -1,6 +1,6 @@
 # Spec — 5 candidate app icons
 
-Generate five distinct candidate icons for "Windows Memory Monitor" (this repo's GUI app: per-app memory usage + a green/yellow/orange/red memory-pressure heuristic).
+Generate five distinct candidate icons for "MemPressMonitor" (this repo's GUI app: per-app memory usage + a green/yellow/orange/red memory-pressure heuristic).
 
 ## Deliverables
 

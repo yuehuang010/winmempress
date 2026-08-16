@@ -61,7 +61,7 @@ Same band semantics, same constants scaled system-wide: `kSystemMeasurableFaults
 
 - No references to `page_faults`, compression, commit-share contribution, or the rolling baseline remain in `src/`.
 - Whole project builds clean at /W4 (`cmake -S . -B build`, `cmake --build build --config Release`; cmake at `C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`).
-- Run `winmempress-cli.exe` once on the idle machine: every ordinary app should now read Low (green range, < 25); flag in your summary if any app other than one actively working reads Moderate+.
-- Run `winmempress-cli.exe --json` and confirm it parses.
+- Run `mempressmonitor-cli.exe` once on the idle machine: every ordinary app should now read Low (green range, < 25); flag in your summary if any app other than one actively working reads Moderate+.
+- Run `mempressmonitor-cli.exe --json` and confirm it parses.
 - `PLAN.md` heuristic section rewritten to match this spec.
 - Do not git commit; leave the working tree for review.

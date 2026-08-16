@@ -1,4 +1,4 @@
-# Milestone 3 spec — Win32 GUI (winmempress.exe)
+# Milestone 3 spec — Win32 GUI (mempressmonitor.exe)
 
 Add the GUI front-end over the existing `memcore` library. Read `PLAN.md` and `CLAUDE.md` first; do not modify `src/core/` or `src/cli/` except the root `CMakeLists.txt` to add the new target.
 
@@ -8,7 +8,7 @@ A dialog-style app, not a full document window:
 
 - `WinMain` + a dialog resource template instantiated as the main window (`DialogBoxParam` or `CreateDialogParam` + message loop — either is fine, keep it simple).
 - Fixed-size dialog frame: caption, system menu, minimize box; no maximize, no resize.
-- Title: "WinMemPress".
+- Title: "MemPressMonitor".
 - Contents, top to bottom:
   1. A single ListView (report view) filling most of the dialog.
   2. One button at the bottom right: **"End Task"**.
@@ -40,7 +40,7 @@ The app must match the current Windows app theme (light/dark), including the tit
 
 ## Plumbing
 
-- New CMake target `winmempress` (WIN32 executable) from `src/gui/`, linking `memcore` and `comctl32`.
+- New CMake target `mempressmonitor` (WIN32 executable) from `src/gui/`, linking `memcore` and `comctl32`.
 - `app.manifest`: comctl32 v6 dependency + per-monitor-v2 DPI awareness; `app.rc` includes the manifest and the dialog template.
 - Same flags as the other targets: `/W4 /permissive- /EHsc`, `UNICODE`/`_UNICODE`.
 - Files: `src/gui/main.cpp` (+ `src/gui/app.rc`, `src/gui/app.manifest`, `src/gui/resource.h`; split a `listview.cpp` out only if `main.cpp` gets unwieldy).
@@ -48,6 +48,6 @@ The app must match the current Windows app theme (light/dark), including the tit
 ## Definition of done
 
 - Whole project builds clean at /W4: `cmake -S . -B build` then `cmake --build build --config Release` (cmake at `C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`).
-- `winmempress-cli` still builds and runs unchanged.
-- Launch `build\Release\winmempress.exe` briefly to confirm it starts, then close it programmatically (e.g. start it, `Start-Sleep 3`, `Stop-Process`) — do not leave it running.
+- `mempressmonitor-cli` still builds and runs unchanged.
+- Launch `build\Release\mempressmonitor.exe` briefly to confirm it starts, then close it programmatically (e.g. start it, `Start-Sleep 3`, `Stop-Process`) — do not leave it running.
 - Do not git commit; leave the working tree for review.

@@ -1,4 +1,4 @@
-# WinMemPress — Plan
+# MemPressMonitor — Plan
 
 A small Windows app that shows **apps** (not raw processes), their total memory usage, and a **memory pressure** score. Windows has no native "memory pressure" metric, so we define a heuristic.
 
@@ -7,8 +7,8 @@ A small Windows app that shows **apps** (not raw processes), their total memory 
 - **C++20, pure Win32** — no .NET, no external frameworks. UI is a plain Win32 window with a ListView common control (comctl32 v6 via manifest); everything links against OS-provided libraries only (`kernel32`, `user32`, `comctl32`, `psapi`, `ntdll`, `shell32`, `version`).
 - **CMake + MSVC** build producing three targets from one tree:
   - `memcore` — static library: collector, grouper, pressure engine. No UI or console dependencies.
-  - `winmempress-cli.exe` — console front-end over `memcore` (table output, optional watch mode).
-  - `winmempress.exe` — Win32 GUI front-end over `memcore`.
+  - `mempressmonitor-cli.exe` — console front-end over `memcore` (table output, optional watch mode).
+  - `mempressmonitor.exe` — Win32 GUI front-end over `memcore`.
 - Runs unelevated by default; system/other-user processes it can't open are aggregated into a single "System & other" row.
 
 ## Source layout
@@ -86,13 +86,13 @@ The system band comes from the raw score, except a rate at or above the system n
 
 ### 4. Front-ends
 
-**CLI (`winmempress-cli.exe`):**
+**CLI (`mempressmonitor-cli.exe`):**
 
 - Default: one snapshot, aligned table (app, working set, commit, pressure), system pressure line at top.
 - `--watch [seconds]`: redraw in place on an interval; `--json` for machine-readable output.
 - Doubles as the validation harness for milestones 1–2 (diff its output against Task Manager's Apps view).
 
-**GUI (`winmempress.exe`):** single Win32 window:
+**GUI (`mempressmonitor.exe`):** single Win32 window:
 
 - Header area: system pressure gauge + total RAM / commit summary (owner-drawn or simple static controls).
 - ListView (report view, `LVS_OWNERDATA` virtual mode): app icon + name, private working set, private commit, pressure badge (custom-draw colored cell), sorted by working set descending.

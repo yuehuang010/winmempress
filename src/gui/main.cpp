@@ -325,7 +325,7 @@ void EndSelectedTask(HWND dialog, DialogState& state) {
 
     const std::wstring message = L"End " + app.display_name + L"? This will terminate " +
                                  std::to_wstring(app.process_ids.size()) + L" process(es).";
-    if (MessageBoxW(dialog, message.c_str(), L"WinMemPress",
+    if (MessageBoxW(dialog, message.c_str(), L"MemPressMonitor",
                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
         return;
 
@@ -445,7 +445,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         LayoutControls(dialog, *new_state);
         EnableWindow(GetDlgItem(dialog, IDC_END_TASK), FALSE);
         if (!StartWorker(*new_state)) {
-            MessageBoxW(dialog, L"Unable to start the memory capture worker.", L"WinMemPress",
+            MessageBoxW(dialog, L"Unable to start the memory capture worker.", L"MemPressMonitor",
                         MB_OK | MB_ICONERROR);
             EndDialog(dialog, 1);
             return TRUE;
@@ -480,7 +480,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
             if (update->success) {
                 RebuildList(dialog, *state, std::move(update->apps));
             } else if (!update->error.empty()) {
-                OutputDebugStringW((L"WinMemPress capture failed: " + update->error + L"\n").c_str());
+                OutputDebugStringW((L"MemPressMonitor capture failed: " + update->error + L"\n").c_str());
             }
         }
         delete update;

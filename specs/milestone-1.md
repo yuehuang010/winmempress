@@ -6,7 +6,7 @@ Implement the `memcore` static library and the CLI front-end per `PLAN.md` (read
 
 - C++20, pure Win32, Unicode builds (`UNICODE`/`_UNICODE`). No third-party dependencies. MSVC via CMake (minimum version 3.20).
 - Layout exactly as PLAN.md: `CMakeLists.txt` at root, `src/core/{appmodel.h,snapshot.h,snapshot.cpp,grouper.h,grouper.cpp,pressure.h,pressure.cpp}`, `src/cli/main.cpp`.
-- Targets: static lib `memcore`, executable `winmempress-cli`. Compile with `/W4 /permissive-`. Link psapi, shell32, version, kernel32, user32; resolve `NtQuerySystemInformation` from ntdll at runtime or link ntdll directly.
+- Targets: static lib `memcore`, executable `mempressmonitor-cli`. Compile with `/W4 /permissive-`. Link psapi, shell32, version, kernel32, user32; resolve `NtQuerySystemInformation` from ntdll at runtime or link ntdll directly.
 - Code quality: clean, obvious, no cleverness, no dead code, no TODO comments. RAII wrappers for HANDLEs. `src/core/` must not include `<commctrl.h>` and must not print anything.
 
 ## snapshot

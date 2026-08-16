@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity type="win32" name="WinMemPress" version="1.0.0.0" />
-  <description>WinMemPress memory pressure monitor</description>
+  <assemblyIdentity type="win32" name="MemPressMonitor" version="1.0.0.0" />
+  <description>Per-app memory usage and memory pressure</description>
   <dependency>
     <dependentAssembly>
       <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls"

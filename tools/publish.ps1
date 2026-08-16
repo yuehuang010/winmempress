@@ -1,5 +1,5 @@
 # Builds the Release configuration and packages the binaries into a zip
-# named with the current git commit SHA, e.g. publish/winmempress-3f2a1b9.zip.
+# named with the current git commit SHA, e.g. publish/mempressmonitor-3f2a1b9.zip.
 # A dirty working tree gets a "-dirty" suffix so the artifact is never
 # mistaken for a clean build of that commit.
 
@@ -27,12 +27,12 @@ if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 
 $releaseDir = Join-Path $repoRoot 'build\Release'
-$stageName = "winmempress-$sha"
+$stageName = "mempressmonitor-$sha"
 $stageDir = Join-Path $repoRoot (Join-Path $OutputDir $stageName)
 if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
 New-Item -ItemType Directory -Force $stageDir | Out-Null
 
-foreach ($file in 'winmempress.exe', 'winmempress-cli.exe') {
+foreach ($file in 'mempressmonitor.exe', 'mempressmonitor-cli.exe') {
     Copy-Item (Join-Path $releaseDir $file) $stageDir
 }
 Copy-Item (Join-Path $repoRoot 'LICENSE') $stageDir
