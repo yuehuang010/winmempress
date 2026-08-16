@@ -126,7 +126,7 @@ void LayoutControls(HWND dialog, DialogState& state) {
     MoveWindow(GetDlgItem(dialog, IDC_END_TASK), button.left, button.top,
                button_width, button_height, TRUE);
     MoveWindow(GetDlgItem(dialog, IDC_PIN_TOPMOST), margin, button.top,
-               ScaleForDpi(70, dpi), button_height, TRUE);
+               ScaleForDpi(130, dpi), button_height, TRUE);
     MoveWindow(state.list, margin, margin, client.right - margin * 2,
                button.top - gap - margin, TRUE);
 

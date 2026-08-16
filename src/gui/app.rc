@@ -11,6 +11,6 @@ BEGIN
     CONTROL         "", IDC_APP_LIST, "SysListView32",
                     WS_TABSTOP | WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SINGLESEL,
                     8, 8, 244, 110
-    AUTOCHECKBOX    "Pin", IDC_PIN_TOPMOST, 8, 128, 50, 20
+    AUTOCHECKBOX    "Always on top", IDC_PIN_TOPMOST, 8, 128, 90, 20
     DEFPUSHBUTTON   "End Task", IDC_END_TASK, 162, 126, 90, 24
 END
