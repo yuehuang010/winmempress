@@ -39,6 +39,8 @@ struct DialogState {
     bool dark = false;
     HBRUSH background_brush = nullptr;
     bool owns_background_brush = false;
+    int sort_column = 1;
+    bool sort_ascending = false;
 };
 
 std::wstring FormatMemory(std::uint64_t bytes) {
@@ -150,16 +152,44 @@ void AddColumns(HWND list) {
     ListView_InsertColumn(list, 2, &column);
 }
 
+int CompareApps(const memcore::AppEntry& left, const memcore::AppEntry& right, int column) {
+    switch (column) {
+    case 1:
+        return left.working_set < right.working_set ? -1
+             : left.working_set > right.working_set ? 1 : 0;
+    case 2:
+        return left.pressure.value - right.pressure.value;
+    default:
+        return _wcsicmp(left.display_name.c_str(), right.display_name.c_str());
+    }
+}
+
+void UpdateSortArrows(const DialogState& state) {
+    const HWND header = ListView_GetHeader(state.list);
+    if (!header) return;
+    for (int column = 0; column < 3; ++column) {
+        HDITEMW item{};
+        item.mask = HDI_FORMAT;
+        if (!Header_GetItem(header, column, &item)) continue;
+        item.fmt &= ~(HDF_SORTUP | HDF_SORTDOWN);
+        if (column == state.sort_column)
+            item.fmt |= state.sort_ascending ? HDF_SORTUP : HDF_SORTDOWN;
+        Header_SetItem(header, column, &item);
+    }
+}
+
 void RebuildList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> apps) {
     std::wstring selected_key;
     const int old_selected = ListView_GetNextItem(state.list, -1, LVNI_SELECTED);
     if (old_selected >= 0 && static_cast<std::size_t>(old_selected) < state.apps.size())
         selected_key = state.apps[static_cast<std::size_t>(old_selected)].key;
 
-    std::sort(apps.begin(), apps.end(), [](const auto& left, const auto& right) {
-        return left.working_set != right.working_set
-            ? left.working_set > right.working_set
-            : left.display_name < right.display_name;
+    const int column = state.sort_column;
+    const bool ascending = state.sort_ascending;
+    std::sort(apps.begin(), apps.end(), [column, ascending](const auto& left, const auto& right) {
+        const int order = CompareApps(left, right, column);
+        if (order != 0) return ascending ? order < 0 : order > 0;
+        return _wcsicmp(left.display_name.c_str(), right.display_name.c_str()) < 0;
     });
     state.apps = std::move(apps);
     ListView_DeleteAllItems(state.list);
@@ -289,6 +319,28 @@ void EndSelectedTask(HWND dialog, DialogState& state) {
     RequestRefresh(state);
 }
 
+LRESULT CALLBACK ListSubclassProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param,
+                                  UINT_PTR, DWORD_PTR ref_data) {
+    if (message == WM_NOTIFY) {
+        const auto* state = reinterpret_cast<const DialogState*>(ref_data);
+        const auto* notification = reinterpret_cast<const NMHDR*>(l_param);
+        if (state && state->dark && notification->code == NM_CUSTOMDRAW &&
+            notification->hwndFrom == ListView_GetHeader(window)) {
+            auto* draw = reinterpret_cast<NMCUSTOMDRAW*>(l_param);
+            switch (draw->dwDrawStage) {
+            case CDDS_PREPAINT:
+                return CDRF_NOTIFYITEMDRAW;
+            case CDDS_ITEMPREPAINT:
+                SetTextColor(draw->hdc, RGB(245, 245, 245));
+                return CDRF_DODEFAULT;
+            default:
+                break;
+            }
+        }
+    }
+    return DefSubclassProc(window, message, w_param, l_param);
+}
+
 COLORREF PressureColor(memcore::PressureBand band, bool dark) {
     switch (band) {
     case memcore::PressureBand::Low: return dark ? RGB(110, 220, 125) : RGB(0, 120, 0);
@@ -328,6 +380,9 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         ListView_SetExtendedListViewStyle(new_state->list,
                                           LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
         AddColumns(new_state->list);
+        SetWindowSubclass(new_state->list, ListSubclassProc, 1,
+                          reinterpret_cast<DWORD_PTR>(new_state));
+        UpdateSortArrows(*new_state);
         ApplyTheme(dialog, *new_state);
         LayoutControls(dialog, *new_state);
         EnableWindow(GetDlgItem(dialog, IDC_END_TASK), FALSE);
@@ -343,6 +398,13 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
     case WM_SIZE:
         if (state) LayoutControls(dialog, *state);
         return TRUE;
+    case WM_GETMINMAXINFO: {
+        auto* info = reinterpret_cast<MINMAXINFO*>(l_param);
+        const UINT dpi = GetDpiForWindow(dialog);
+        info->ptMinTrackSize.x = ScaleForDpi(420, dpi);
+        info->ptMinTrackSize.y = ScaleForDpi(300, dpi);
+        return TRUE;
+    }
     case WM_DPICHANGED: {
         const auto* suggested = reinterpret_cast<const RECT*>(l_param);
         SetWindowPos(dialog, nullptr, suggested->left, suggested->top,
@@ -375,6 +437,18 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
             }
             if (header->code == LVN_ITEMCHANGED)
                 UpdateEndTaskState(dialog, *state);
+            if (header->code == LVN_COLUMNCLICK) {
+                const int column = reinterpret_cast<const NMLISTVIEW*>(l_param)->iSubItem;
+                if (column == state->sort_column) {
+                    state->sort_ascending = !state->sort_ascending;
+                } else {
+                    state->sort_column = column;
+                    state->sort_ascending = column == 0;
+                }
+                UpdateSortArrows(*state);
+                std::vector<memcore::AppEntry> apps = state->apps;
+                RebuildList(dialog, *state, std::move(apps));
+            }
         }
         break;
     case WM_COMMAND:
@@ -408,6 +482,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         return TRUE;
     case WM_DESTROY:
         if (state) {
+            RemoveWindowSubclass(state->list, ListSubclassProc, 1);
             StopWorker(dialog, *state);
             if (state->owns_background_brush && state->background_brush)
                 DeleteObject(state->background_brush);
