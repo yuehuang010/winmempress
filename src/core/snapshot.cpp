@@ -25,7 +25,7 @@ struct ProcessRecord {
     ULONG handle_count, session_id;
     ULONG_PTR unique_process_key;
     SIZE_T peak_virtual_size, virtual_size;
-    ULONG page_fault_count;
+    ULONG reserved_process_fault_count;
     SIZE_T peak_working_set_size, working_set_size;
     SIZE_T quota_peak_paged_pool_usage, quota_paged_pool_usage;
     SIZE_T quota_peak_non_paged_pool_usage, quota_non_paged_pool_usage;
@@ -161,13 +161,11 @@ bool CaptureSnapshot(Snapshot& snapshot, std::wstring& error_message) {
             ? static_cast<std::uint64_t>(record->working_set_private_size.QuadPart)
             : static_cast<std::uint64_t>(record->working_set_size);
         process.commit = static_cast<std::uint64_t>(record->pagefile_usage);
-        process.page_faults = record->page_fault_count;
+        process.hard_faults = record->hard_fault_count;
         process.image_name = ToString(record->image_name);
         QueryDetails(process);
         if (process.exe_path.empty()) process.exe_path = process.image_name;
-        snapshot.system.page_faults += process.page_faults;
-        if (_wcsicmp(process.image_name.c_str(), L"Memory Compression") == 0)
-            snapshot.system.memory_compression_working_set += process.working_set;
+        snapshot.system.hard_faults += process.hard_faults;
         snapshot.processes.push_back(std::move(process));
 
         if (!record->next_entry_offset) break;

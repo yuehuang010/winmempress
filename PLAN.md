@@ -61,22 +61,28 @@ App identity for display: exe `FileDescription` (fallback: exe name), icon extra
 
 ### 3. Memory pressure heuristic
 
-Two scores, both 0–100 mapped to Low / Moderate / High / Critical.
+The pressure score answers one question: **is memory slowing this app down?** Every score is 0–100 and maps to four bands:
 
-**System pressure** (header bar) — the max-driven blend of:
+- **Low (green, 0–24):** memory is not slowing this app.
+- **Moderate (yellow, 25–49):** memory is slowing it measurably but below human-noticeable levels. This also covers a latent trim: working set below half of commit while system memory is tight, so the app will fault when the user returns to it.
+- **High (orange, 50–74):** noticeably affected right now but not sustained, likely a spike such as paging back in after an app switch.
+- **Critical (red, 75–100):** noticeably affected and sustained across at least three intervals.
 
-- **Commit load:** committed / commit limit. This is the number that actually causes allocation failures. Weight highest; ≥90% is Critical on its own.
-- **Physical load:** 1 − (available / total RAM), with `\Memory\Available MBytes` semantics (standby counts as available).
-- **Paging activity:** hard fault rate (`Pages Input/sec` equivalent from fault deltas) normalized against a rolling baseline — distinguishes "RAM is full but idle" from "actively thrashing".
-- **Compression signal:** Memory Compression store working set as a fraction of RAM — Windows compressing aggressively is an early-warning sign.
+The collector uses `HardFaultCount` from `SYSTEM_PROCESS_INFORMATION`. Hard-fault rates are deltas between successive snapshots divided by QPC elapsed seconds; the first snapshot has a zero rate. Per-app history stores the last hard-fault count and the consecutive interval count at or above 100 hard faults/sec.
 
-Score = `max(commitScore, physScore) * 0.7 + pagingScore * 0.2 + compressionScore * 0.1`, clamped; exact weights tuned during milestone 2 against real load (open 50 tabs, run a memory hog).
+**Per-app pressure** uses `kMeasurableFaultsPerSec = 10.0`, `kNoticeableFaultsPerSec = 100.0`, and `kSustainedIntervals = 3`:
 
-**Per-app pressure** (per row) — "how much is this app contributing / suffering":
+1. Rate ≥ noticeable with at least three consecutive intervals is Critical.
+2. Rate ≥ noticeable otherwise is High.
+3. Rate ≥ measurable is Moderate.
+4. A latent trim is Moderate: working-set / commit < 0.5, commit > 0, and `max(commit_ratio, physical_ratio) ≥ 0.8`.
+5. Otherwise it is Low.
 
-- Share of total commit (contribution).
-- Working-set-to-commit ratio: a low ratio under high system pressure means the app has been trimmed and will hard-fault when touched (suffering).
-- Fault rate and commit growth trend over the last N intervals (leaking / ballooning).
+Scores are linearly interpolated within the selected band. Low maps 0–10 faults/sec to 0–24; Moderate maps 10–100 to 25–49; a latent-trim-only score is `25 + (1 − working_set / commit) × 24`; High maps 100–1000 to 50–74; and Critical maps 100–1000 to 75–100. All ranges are clamped. Commit-share and commit-growth terms are not part of the score.
+
+**System pressure** uses `kSystemMeasurableFaultsPerSec = 50.0`, `kSystemNoticeableFaultsPerSec = 500.0`, and the same sustained interval count. Its memory load is `max(commit_total / commit_limit, 1 − physical_available / physical_total)`, with zero-denominator guards. Load score is `memory_load / 0.9 × 100`, clamped. Fault score maps 0–5000 hard faults/sec to 0–100. The raw score is `0.5 × load_score + 0.5 × fault_score`.
+
+The system band comes from the raw score, except a rate at or above the system noticeable threshold forces at least High. Critical requires both a raw score of at least 75 and three sustained noticeable-fault intervals; otherwise a raw score of at least 75 is capped at High. The final numeric score is clamped into the selected band’s range. There is no rolling baseline.
 
 ### 4. Front-ends
 

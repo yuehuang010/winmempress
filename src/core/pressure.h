@@ -1,7 +1,6 @@
 #pragma once
 #include "appmodel.h"
 #include <cstdint>
-#include <deque>
 #include <map>
 #include <vector>
 namespace memcore {
@@ -12,11 +11,12 @@ public:
     PressureScore SystemPressure() const { return system_pressure_; }
 private:
     struct AppHistory {
-        std::uint64_t captured_at_qpc = 0, working_set = 0, commit = 0, page_faults = 0;
+        std::uint64_t captured_at_qpc = 0, hard_faults = 0;
+        std::uint32_t noticeable_intervals = 0;
     };
-    std::deque<double> page_fault_rates_;
     std::map<std::wstring, AppHistory> app_history_;
-    std::uint64_t previous_captured_at_qpc_ = 0, previous_page_faults_ = 0;
+    std::uint64_t previous_captured_at_qpc_ = 0, previous_hard_faults_ = 0;
+    std::uint32_t system_noticeable_intervals_ = 0;
     PressureScore system_pressure_;
 };
 }

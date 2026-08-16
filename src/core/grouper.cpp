@@ -60,7 +60,7 @@ std::wstring PathOf(const ProcessInfo& process) {
 void Add(AppEntry& app, const ProcessInfo& process) {
     app.working_set += process.working_set;
     app.commit += process.commit;
-    app.page_faults += process.page_faults;
+    app.hard_faults += process.hard_faults;
     app.process_ids.push_back(process.process_id);
     if (app.exe_path.empty()) app.exe_path = PathOf(process);
     if (app.display_name.empty()) {

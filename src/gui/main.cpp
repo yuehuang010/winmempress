@@ -293,7 +293,7 @@ COLORREF PressureColor(memcore::PressureBand band, bool dark) {
     switch (band) {
     case memcore::PressureBand::Low: return dark ? RGB(110, 220, 125) : RGB(0, 120, 0);
     case memcore::PressureBand::Moderate: return dark ? RGB(255, 210, 80) : RGB(145, 95, 0);
-    case memcore::PressureBand::High:
+    case memcore::PressureBand::High: return dark ? RGB(255, 165, 70) : RGB(200, 100, 0);
     case memcore::PressureBand::Critical: return dark ? RGB(255, 115, 115) : RGB(175, 0, 0);
     }
     return dark ? RGB(245, 245, 245) : RGB(0, 0, 0);
