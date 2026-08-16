@@ -90,6 +90,9 @@ void ApplyTheme(HWND dialog, DialogState& state) {
     state.owns_background_brush = state.dark;
 
     ApplyTitleBarTheme(dialog, state.dark);
+    const HWND button = GetDlgItem(dialog, IDC_END_TASK);
+    if (button)
+        SetWindowTheme(button, state.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     if (state.list) {
         const COLORREF background = state.dark ? RGB(32, 32, 32) : GetSysColor(COLOR_WINDOW);
         const COLORREF text = state.dark ? RGB(245, 245, 245) : GetSysColor(COLOR_WINDOWTEXT);
@@ -123,6 +126,14 @@ void LayoutControls(HWND dialog, DialogState& state) {
                button_width, button_height, TRUE);
     MoveWindow(state.list, margin, margin, client.right - margin * 2,
                button.top - gap - margin, TRUE);
+
+    RECT list_client{};
+    GetClientRect(state.list, &list_client);
+    const int fixed_columns = ListView_GetColumnWidth(state.list, 1) +
+                              ListView_GetColumnWidth(state.list, 2);
+    const int name_width = std::max(ScaleForDpi(120, dpi),
+                                    static_cast<int>(list_client.right) - fixed_columns);
+    ListView_SetColumnWidth(state.list, 0, name_width);
 }
 
 void UpdateEndTaskState(HWND dialog, const DialogState& state) {
@@ -143,12 +154,12 @@ void AddColumns(HWND list) {
 
     column.pszText = const_cast<LPWSTR>(L"Memory");
     column.cx = ScaleForDpi(110, dpi);
-    column.fmt = LVCFMT_RIGHT;
+    column.fmt = LVCFMT_CENTER;
     ListView_InsertColumn(list, 1, &column);
 
     column.pszText = const_cast<LPWSTR>(L"Pressure");
     column.cx = ScaleForDpi(110, dpi);
-    column.fmt = LVCFMT_RIGHT;
+    column.fmt = LVCFMT_CENTER;
     ListView_InsertColumn(list, 2, &column);
 }
 
@@ -351,11 +362,33 @@ COLORREF PressureColor(memcore::PressureBand band, bool dark) {
     return dark ? RGB(245, 245, 245) : RGB(0, 0, 0);
 }
 
+void PaintOverColumnSeparators(const NMLVCUSTOMDRAW& draw) {
+    const HWND list = draw.nmcd.hdr.hwndFrom;
+    const HWND header = ListView_GetHeader(list);
+    RECT client{};
+    GetClientRect(list, &client);
+    RECT header_rect{};
+    GetWindowRect(header, &header_rect);
+    const int top = header_rect.bottom - header_rect.top;
+
+    const HBRUSH brush = CreateSolidBrush(ListView_GetBkColor(list));
+    for (int column = 0; column < 3; ++column) {
+        RECT item{};
+        if (!Header_GetItemRect(header, column, &item)) continue;
+        RECT line{item.right - 2, top, item.right + 2, client.bottom};
+        FillRect(draw.nmcd.hdc, &line, brush);
+    }
+    DeleteObject(brush);
+}
+
 LRESULT HandleCustomDraw(const DialogState& state, LPARAM parameter) {
     auto* draw = reinterpret_cast<NMLVCUSTOMDRAW*>(parameter);
     switch (draw->nmcd.dwDrawStage) {
     case CDDS_PREPAINT:
-        return CDRF_NOTIFYITEMDRAW;
+        return CDRF_NOTIFYITEMDRAW | CDRF_NOTIFYPOSTPAINT;
+    case CDDS_POSTPAINT:
+        PaintOverColumnSeparators(*draw);
+        return CDRF_DODEFAULT;
     case CDDS_ITEMPREPAINT:
         return CDRF_NOTIFYSUBITEMDRAW;
     case CDDS_ITEMPREPAINT | CDDS_SUBITEM: {
