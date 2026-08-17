@@ -5,3 +5,4 @@
 #define IDC_APP_LIST 1001
 #define IDC_END_TASK 1002
 #define IDC_PIN_TOPMOST 1003
+#define IDC_EXPAND 1004

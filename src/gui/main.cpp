@@ -6,11 +6,15 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <dwmapi.h>
+#include <shlobj.h>
+#include <shellapi.h>
 #include <uxtheme.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <cwctype>
 #include <iomanip>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -28,20 +32,34 @@ struct WorkerResult {
     memcore::PressureScore system_pressure;
 };
 
+struct RenderedRow {
+    std::wstring name;
+    std::wstring memory;
+    std::wstring pressure;
+    int image = -1;
+};
+
 struct DialogState {
     HWND dialog = nullptr;
     HWND list = nullptr;
     HANDLE stop_event = nullptr;
     HANDLE refresh_event = nullptr;
     std::thread worker;
+    std::vector<memcore::AppEntry> all_apps;
     std::vector<memcore::AppEntry> apps;
+    std::vector<RenderedRow> rendered_rows;
     bool dark = false;
     HBRUSH background_brush = nullptr;
     bool owns_background_brush = false;
     int sort_column = 1;
     bool sort_ascending = false;
+    bool show_all = false;
     HICON icon_big = nullptr;
     HICON icon_small = nullptr;
+    HIMAGELIST image_list = nullptr;
+    int small_icon_height = 0;
+    int fallback_image = -1;
+    std::map<std::wstring, int> icon_cache;
 };
 
 std::wstring FormatMemory(std::uint64_t bytes) {
@@ -91,7 +109,7 @@ void ApplyTheme(HWND dialog, DialogState& state) {
     state.owns_background_brush = state.dark;
 
     ApplyTitleBarTheme(dialog, state.dark);
-    for (const int control : {IDC_END_TASK, IDC_PIN_TOPMOST}) {
+    for (const int control : {IDC_END_TASK, IDC_PIN_TOPMOST, IDC_EXPAND}) {
         const HWND button = GetDlgItem(dialog, control);
         if (button)
             SetWindowTheme(button, state.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
@@ -129,6 +147,8 @@ void LayoutControls(HWND dialog, DialogState& state) {
                button_width, button_height, TRUE);
     MoveWindow(GetDlgItem(dialog, IDC_PIN_TOPMOST), margin, button.top,
                ScaleForDpi(130, dpi), button_height, TRUE);
+    MoveWindow(GetDlgItem(dialog, IDC_EXPAND), margin + ScaleForDpi(130, dpi) + gap,
+               button.top, button_width, button_height, TRUE);
     MoveWindow(state.list, margin, margin, client.right - margin * 2,
                button.top - gap - margin, TRUE);
 
@@ -149,6 +169,10 @@ void UpdateEndTaskState(HWND dialog, const DialogState& state) {
     EnableWindow(GetDlgItem(dialog, IDC_END_TASK), enabled ? TRUE : FALSE);
 }
 
+void UpdateExpandButton(HWND dialog, const DialogState& state) {
+    SetWindowTextW(GetDlgItem(dialog, IDC_EXPAND), state.show_all ? L"Show top 6" : L"Show all");
+}
+
 void AddColumns(HWND list) {
     const UINT dpi = GetDpiForWindow(list);
     LVCOLUMNW column{};
@@ -167,6 +191,75 @@ void AddColumns(HWND list) {
     column.cx = ScaleForDpi(110, dpi);
     column.fmt = LVCFMT_CENTER;
     ListView_InsertColumn(list, 2, &column);
+}
+
+std::wstring LowercasePath(const std::wstring& path) {
+    std::wstring result = path;
+    std::transform(result.begin(), result.end(), result.begin(), [](wchar_t character) {
+        return static_cast<wchar_t>(std::towlower(character));
+    });
+    return result;
+}
+
+void DestroySmallImageList(DialogState& state) {
+    if (!state.image_list)
+        return;
+    const HIMAGELIST image_list =
+        ListView_SetImageList(state.list, nullptr, LVSIL_SMALL);
+    if (image_list)
+        ImageList_Destroy(image_list);
+    else
+        ImageList_Destroy(state.image_list);
+    state.image_list = nullptr;
+}
+
+void CreateSmallImageList(DialogState& state, UINT dpi) {
+    DestroySmallImageList(state);
+    state.icon_cache.clear();
+    state.fallback_image = -1;
+
+    const int cx = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+    const int cy = GetSystemMetricsForDpi(SM_CYSMICON, dpi);
+    state.small_icon_height = cy;
+    state.image_list = ImageList_Create(cx, cy, ILC_COLOR32 | ILC_MASK, 16, 16);
+    if (!state.image_list)
+        return;
+
+    ListView_SetImageList(state.list, state.image_list, LVSIL_SMALL);
+
+    SHSTOCKICONINFO stock_icon{};
+    stock_icon.cbSize = sizeof(stock_icon);
+    if (SUCCEEDED(SHGetStockIconInfo(SIID_APPLICATION,
+                                     SHGSI_ICON | SHGSI_SMALLICON, &stock_icon)) &&
+        stock_icon.hIcon) {
+        state.fallback_image = ImageList_AddIcon(state.image_list, stock_icon.hIcon);
+        DestroyIcon(stock_icon.hIcon);
+    }
+}
+
+int ImageIndexForApp(DialogState& state, const std::wstring& exe_path) {
+    const std::wstring cache_key = LowercasePath(exe_path);
+    const auto cached = state.icon_cache.find(cache_key);
+    if (cached != state.icon_cache.end())
+        return cached->second;
+
+    int image = state.fallback_image;
+    if (!exe_path.empty() && state.image_list) {
+        HICON extracted_icon = nullptr;
+        const HRESULT result = SHDefExtractIconW(exe_path.c_str(), 0, 0, nullptr, &extracted_icon,
+                                                 MAKELONG(0, state.small_icon_height));
+        if (SUCCEEDED(result) && extracted_icon) {
+            const int extracted = ImageList_AddIcon(state.image_list, extracted_icon);
+            DestroyIcon(extracted_icon);
+            if (extracted >= 0)
+                image = extracted;
+        } else if (extracted_icon) {
+            DestroyIcon(extracted_icon);
+        }
+    }
+
+    state.icon_cache.emplace(cache_key, image);
+    return image;
 }
 
 int CompareApps(const memcore::AppEntry& left, const memcore::AppEntry& right, int column) {
@@ -195,12 +288,112 @@ void UpdateSortArrows(const DialogState& state) {
     }
 }
 
-void RebuildList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> apps) {
+std::vector<memcore::AppEntry> VisibleApps(const std::vector<memcore::AppEntry>& all_apps,
+                                           bool show_all) {
+    if (show_all) return all_apps;
+
+    std::vector<memcore::AppEntry> visible;
+    visible.reserve(std::min<std::size_t>(all_apps.size(), 7));
+    std::size_t app_count = 0;
+    for (const auto& app : all_apps) {
+        if (app.key == memcore::kBackgroundAppKey) continue;
+        if (app_count == 6) break;
+        visible.push_back(app);
+        ++app_count;
+    }
+    const auto background = std::find_if(all_apps.begin(), all_apps.end(), [](const auto& app) {
+        return app.key == memcore::kBackgroundAppKey;
+    });
+    if (background != all_apps.end()) visible.push_back(*background);
+    return visible;
+}
+
+void UpdateList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> apps) {
     std::wstring selected_key;
     const int old_selected = ListView_GetNextItem(state.list, -1, LVNI_SELECTED);
     if (old_selected >= 0 && static_cast<std::size_t>(old_selected) < state.apps.size())
         selected_key = state.apps[static_cast<std::size_t>(old_selected)].key;
 
+    if (old_selected >= 0)
+        ListView_SetItemState(state.list, old_selected, 0, LVIS_SELECTED | LVIS_FOCUSED);
+
+    state.apps = std::move(apps);
+    const int old_count = ListView_GetItemCount(state.list);
+    const int new_count = static_cast<int>(state.apps.size());
+    std::vector<RenderedRow> rendered_rows;
+    rendered_rows.reserve(state.apps.size());
+
+    for (int index = 0; index < std::min(old_count, new_count); ++index) {
+        const auto& app = state.apps[static_cast<std::size_t>(index)];
+        const std::wstring memory = FormatMemory(app.working_set);
+        const std::wstring pressure = std::to_wstring(app.pressure.value) + L"%";
+        const int image = ImageIndexForApp(state, app.exe_path);
+        const RenderedRow row{app.display_name, memory, pressure, image};
+
+        LVITEMW item{};
+        item.mask = LVIF_PARAM;
+        item.iItem = index;
+        item.lParam = static_cast<LPARAM>(index);
+        ListView_SetItem(state.list, &item);
+        if (static_cast<std::size_t>(index) >= state.rendered_rows.size() ||
+            state.rendered_rows[static_cast<std::size_t>(index)].image != row.image) {
+            LVITEMW image_item{};
+            image_item.mask = LVIF_IMAGE;
+            image_item.iItem = index;
+            image_item.iImage = row.image;
+            ListView_SetItem(state.list, &image_item);
+        }
+        if (static_cast<std::size_t>(index) >= state.rendered_rows.size() ||
+            state.rendered_rows[static_cast<std::size_t>(index)].name != row.name)
+            ListView_SetItemText(state.list, index, 0, const_cast<LPWSTR>(row.name.c_str()));
+        if (static_cast<std::size_t>(index) >= state.rendered_rows.size() ||
+            state.rendered_rows[static_cast<std::size_t>(index)].memory != row.memory)
+            ListView_SetItemText(state.list, index, 1, const_cast<LPWSTR>(row.memory.c_str()));
+        if (static_cast<std::size_t>(index) >= state.rendered_rows.size() ||
+            state.rendered_rows[static_cast<std::size_t>(index)].pressure != row.pressure)
+            ListView_SetItemText(state.list, index, 2, const_cast<LPWSTR>(row.pressure.c_str()));
+        rendered_rows.push_back(row);
+    }
+
+    for (int index = old_count; index < new_count; ++index) {
+        const auto& app = state.apps[static_cast<std::size_t>(index)];
+        const int image = ImageIndexForApp(state, app.exe_path);
+        LVITEMW item{};
+        item.mask = LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE;
+        item.iItem = index;
+        item.lParam = static_cast<LPARAM>(index);
+        item.iImage = image;
+        item.pszText = const_cast<LPWSTR>(app.display_name.c_str());
+        ListView_InsertItem(state.list, &item);
+
+        const std::wstring memory = FormatMemory(app.working_set);
+        ListView_SetItemText(state.list, index, 1, const_cast<LPWSTR>(memory.c_str()));
+        const std::wstring pressure = std::to_wstring(app.pressure.value) + L"%";
+        ListView_SetItemText(state.list, index, 2, const_cast<LPWSTR>(pressure.c_str()));
+        rendered_rows.push_back({app.display_name, memory, pressure, image});
+    }
+
+    for (int index = old_count - 1; index >= new_count; --index)
+        ListView_DeleteItem(state.list, index);
+
+    state.rendered_rows = std::move(rendered_rows);
+    const auto selected = std::find_if(state.apps.begin(), state.apps.end(),
+                                       [&selected_key](const auto& app) {
+                                           return !selected_key.empty() && app.key == selected_key;
+                                       });
+    if (selected != state.apps.end()) {
+        const int index = static_cast<int>(std::distance(state.apps.begin(), selected));
+        ListView_SetItemState(state.list, index, LVIS_SELECTED | LVIS_FOCUSED,
+                              LVIS_SELECTED | LVIS_FOCUSED);
+    }
+    UpdateEndTaskState(dialog, state);
+}
+
+void RefreshVisibleList(HWND dialog, DialogState& state) {
+    UpdateList(dialog, state, VisibleApps(state.all_apps, state.show_all));
+}
+
+void RebuildList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> apps) {
     const int column = state.sort_column;
     const bool ascending = state.sort_ascending;
     std::sort(apps.begin(), apps.end(), [column, ascending](const auto& left, const auto& right) {
@@ -211,33 +404,8 @@ void RebuildList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry>
         if (order != 0) return ascending ? order < 0 : order > 0;
         return _wcsicmp(left.display_name.c_str(), right.display_name.c_str()) < 0;
     });
-    state.apps = std::move(apps);
-    ListView_DeleteAllItems(state.list);
-
-    for (std::size_t index = 0; index < state.apps.size(); ++index) {
-        const auto& app = state.apps[index];
-        LVITEMW item{};
-        item.mask = LVIF_TEXT | LVIF_PARAM;
-        item.iItem = static_cast<int>(index);
-        item.lParam = static_cast<LPARAM>(index);
-        item.pszText = const_cast<LPWSTR>(app.display_name.c_str());
-        ListView_InsertItem(state.list, &item);
-
-        const std::wstring memory = FormatMemory(app.working_set);
-        ListView_SetItemText(state.list, static_cast<int>(index), 1,
-                             const_cast<LPWSTR>(memory.c_str()));
-        const std::wstring pressure = std::to_wstring(app.pressure.value) + L"%";
-        ListView_SetItemText(state.list, static_cast<int>(index), 2,
-                             const_cast<LPWSTR>(pressure.c_str()));
-
-        if (app.key == selected_key) {
-            ListView_SetItemState(state.list, static_cast<int>(index),
-                                  LVIS_SELECTED | LVIS_FOCUSED,
-                                  LVIS_SELECTED | LVIS_FOCUSED);
-        }
-    }
-    UpdateEndTaskState(dialog, state);
-    InvalidateRect(state.list, nullptr, TRUE);
+    state.all_apps = std::move(apps);
+    RefreshVisibleList(dialog, state);
 }
 
 void CaptureOnWorker(DialogState* state) {
@@ -363,8 +531,9 @@ LRESULT CALLBACK ListSubclassProc(HWND window, UINT message, WPARAM w_param, LPA
 
 COLORREF PressureColor(memcore::PressureBand band, bool dark) {
     switch (band) {
-    case memcore::PressureBand::Low: return dark ? RGB(110, 220, 125) : RGB(0, 120, 0);
-    case memcore::PressureBand::Moderate: return dark ? RGB(255, 210, 80) : RGB(145, 95, 0);
+    case memcore::PressureBand::Low:
+    case memcore::PressureBand::Moderate:
+        return dark ? RGB(110, 220, 125) : RGB(0, 120, 0);
     case memcore::PressureBand::High: return dark ? RGB(255, 165, 70) : RGB(200, 100, 0);
     case memcore::PressureBand::Critical: return dark ? RGB(255, 115, 115) : RGB(175, 0, 0);
     }
@@ -435,6 +604,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
             SendMessageW(dialog, WM_SETICON, ICON_SMALL,
                          reinterpret_cast<LPARAM>(new_state->icon_small));
         SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(new_state));
+        CreateSmallImageList(*new_state, dpi);
         ListView_SetExtendedListViewStyle(new_state->list,
                                           LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
         AddColumns(new_state->list);
@@ -443,6 +613,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         UpdateSortArrows(*new_state);
         ApplyTheme(dialog, *new_state);
         LayoutControls(dialog, *new_state);
+        UpdateExpandButton(dialog, *new_state);
         EnableWindow(GetDlgItem(dialog, IDC_END_TASK), FALSE);
         if (!StartWorker(*new_state)) {
             MessageBoxW(dialog, L"Unable to start the memory capture worker.", L"MemPressMonitor",
@@ -468,7 +639,12 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
         SetWindowPos(dialog, nullptr, suggested->left, suggested->top,
                      suggested->right - suggested->left, suggested->bottom - suggested->top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
-        if (state) LayoutControls(dialog, *state);
+        if (state) {
+            CreateSmallImageList(*state, HIWORD(w_param));
+            state->rendered_rows.clear();
+            RefreshVisibleList(dialog, *state);
+            LayoutControls(dialog, *state);
+        }
         return TRUE;
     }
     case WM_TIMER:
@@ -504,7 +680,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
                     state->sort_ascending = column == 0;
                 }
                 UpdateSortArrows(*state);
-                std::vector<memcore::AppEntry> apps = state->apps;
+                std::vector<memcore::AppEntry> apps = state->all_apps;
                 RebuildList(dialog, *state, std::move(apps));
             }
         }
@@ -512,6 +688,12 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
     case WM_COMMAND:
         if (LOWORD(w_param) == IDC_END_TASK && HIWORD(w_param) == BN_CLICKED && state) {
             EndSelectedTask(dialog, *state);
+            return TRUE;
+        }
+        if (LOWORD(w_param) == IDC_EXPAND && HIWORD(w_param) == BN_CLICKED && state) {
+            state->show_all = !state->show_all;
+            UpdateExpandButton(dialog, *state);
+            RefreshVisibleList(dialog, *state);
             return TRUE;
         }
         if (LOWORD(w_param) == IDC_PIN_TOPMOST && HIWORD(w_param) == BN_CLICKED) {
@@ -550,6 +732,7 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM w_param, LPARAM l_
             StopWorker(dialog, *state);
             if (state->owns_background_brush && state->background_brush)
                 DeleteObject(state->background_brush);
+            DestroySmallImageList(*state);
             if (state->icon_big) DestroyIcon(state->icon_big);
             if (state->icon_small) DestroyIcon(state->icon_small);
             delete state;

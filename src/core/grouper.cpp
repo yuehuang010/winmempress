@@ -106,6 +106,8 @@ std::vector<AppEntry> GroupProcesses(const Snapshot& snapshot) {
             if (process.create_time && parent_process.create_time &&
                 parent_process.create_time > process.create_time)
                 return snapshot.processes.size();
+            if (_wcsicmp(BaseName(PathOf(parent_process)).c_str(), L"explorer.exe") == 0)
+                return current;
             current = parent->second;
         }
     };
