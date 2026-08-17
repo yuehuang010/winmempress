@@ -28,8 +28,7 @@ param(
     [ValidateSet('x64', 'arm64')]
     [string]$Architecture = 'x64',
 
-    [ValidatePattern('^\d+\.\d+\.\d+\.0$')]
-    [string]$Version = '1.0.0.0',
+    [string]$Version,
 
     [string]$IdentityName = 'MemPressMonitor.Development',
 
@@ -45,6 +44,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent ([System.IO.Path]::GetFullPath($PSScriptRoot))
+$versionPath = Join-Path $repoRoot 'VERSION'
+if ([string]::IsNullOrEmpty($Version)) {
+    if (-not (Test-Path -LiteralPath $versionPath)) { throw "Version file is missing: $versionPath" }
+    $Version = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+}
+if ($Version -notmatch '^\d+\.\d+\.\d+\.0$') {
+    throw "Version must match <major>.<minor>.<patch>.0; got '$Version'"
+}
+
 $packagingDir = Join-Path $repoRoot 'packaging'
 $assetDir = Join-Path $packagingDir 'Assets'
 $outDir = Join-Path $packagingDir 'out'

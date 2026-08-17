@@ -1,6 +1,7 @@
 #include "grouper.h"
 #include "pressure.h"
 #include "snapshot.h"
+#include "version.h"
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
@@ -67,7 +68,7 @@ std::wstring Escape(const std::wstring& value) {
     return result;
 }
 void Help() {
-    wprintf(L"MemPressMonitor CLI\n\n");
+    wprintf(L"MemPressMonitor CLI %ls\n\n", MEMPRESS_VERSION_WIDE_STRINGIZE(APP_VERSION_STRING));
     wprintf(L"Usage: mempressmonitor-cli [--watch [seconds]] [--json] [--help]\n\n");
     wprintf(L"  --watch [seconds]  Refresh until Ctrl+C (default interval: 2 seconds)\n");
     wprintf(L"  --json              Emit machine-readable JSON\n");

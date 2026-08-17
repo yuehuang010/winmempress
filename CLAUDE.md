@@ -25,6 +25,8 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
+Version lives in the root `VERSION` file and flows into the exes, MSIX, and publish zip from there.
+
 Must compile clean at `/W4 /permissive-`. No third-party dependencies — OS libraries only.
 
 ## Delegating implementation to Codex
