@@ -60,6 +60,7 @@ std::wstring PathOf(const ProcessInfo& process) {
 void Add(AppEntry& app, const ProcessInfo& process) {
     app.working_set += process.working_set;
     app.commit += process.commit;
+    app.gpu_shared += process.gpu_shared;
     app.hard_faults += process.hard_faults;
     app.process_ids.push_back(process.process_id);
     if (app.exe_path.empty()) app.exe_path = PathOf(process);
@@ -92,30 +93,25 @@ std::vector<AppEntry> GroupProcesses(const Snapshot& snapshot) {
     for (std::size_t i = 0; i < snapshot.processes.size(); ++i)
         indexes.emplace(snapshot.processes[i].process_id, i);
 
-    // Walk to the topmost ancestor below explorer, so helper processes with
-    // their own windows (e.g. steamwebhelper.exe under steam.exe) fold into
-    // one app instead of splitting the tree at the first visible process.
-    const auto root_for = [&](std::size_t start) {
+    // Find the nearest visible ancestor. The start process is known not to
+    // own a visible window, so only its parents can be anchors.
+    const auto nearest_visible_ancestor = [&](std::size_t start) {
         std::set<DWORD> visited;
         std::size_t current = start;
-        bool any_visible = false;
-        const auto finish = [&] {
-            return any_visible ? current : snapshot.processes.size();
-        };
+        visited.insert(snapshot.processes[current].process_id);
         for (;;) {
             const ProcessInfo& process = snapshot.processes[current];
-            any_visible = any_visible || visible.contains(process.process_id);
-            if (!process.parent_process_id ||
-                !visited.insert(process.process_id).second) return finish();
+            if (!process.parent_process_id) return snapshot.processes.size();
             const auto parent = indexes.find(process.parent_process_id);
-            if (parent == indexes.end()) return finish();
+            if (parent == indexes.end()) return snapshot.processes.size();
             const ProcessInfo& parent_process = snapshot.processes[parent->second];
             if (process.create_time && parent_process.create_time &&
                 parent_process.create_time > process.create_time)
-                return finish();
-            if (_wcsicmp(BaseName(PathOf(parent_process)).c_str(), L"explorer.exe") == 0)
-                return current;
+                return snapshot.processes.size();
             current = parent->second;
+            if (visible.contains(snapshot.processes[current].process_id)) return current;
+            if (!visited.insert(snapshot.processes[current].process_id).second)
+                return snapshot.processes.size();
         }
     };
 
@@ -130,21 +126,22 @@ std::vector<AppEntry> GroupProcesses(const Snapshot& snapshot) {
     for (std::size_t i = 0; i < snapshot.processes.size(); ++i) {
         const ProcessInfo& process = snapshot.processes[i];
         std::wstring key;
-        std::size_t root = snapshot.processes.size();
+        std::size_t anchor_index = snapshot.processes.size();
         if (!process.package_family_name.empty()) {
             key = L"package:" + Lower(process.package_family_name);
         } else {
-            root = root_for(i);
-            if (root != snapshot.processes.size()) {
-                const ProcessInfo& root_process = snapshot.processes[root];
-                if (!root_process.package_family_name.empty()) {
+            anchor_index =
+                visible.contains(process.process_id) ? i : nearest_visible_ancestor(i);
+            if (anchor_index != snapshot.processes.size()) {
+                const ProcessInfo& anchor = snapshot.processes[anchor_index];
+                if (!anchor.package_family_name.empty()) {
                     // Unpackaged child of a packaged app (e.g. the Claude Code
                     // CLI spawned by the MSIX Claude desktop app): adopt the
                     // package's row instead of opening a desktop row for the
                     // same tree.
-                    key = L"package:" + Lower(root_process.package_family_name);
+                    key = L"package:" + Lower(anchor.package_family_name);
                 } else {
-                    const std::wstring path = PathOf(root_process);
+                    const std::wstring path = PathOf(anchor);
                     if (!path.empty()) key = L"desktop:" + Lower(path);
                 }
             }
@@ -158,11 +155,10 @@ std::vector<AppEntry> GroupProcesses(const Snapshot& snapshot) {
             if (found != group_indexes.end()) {
                 app_index = found->second;
             } else {
-                // Name the group after its root, not the process encountered
-                // first; enumeration order is arbitrary, and a helper-first
-                // walk must not label the app with the helper's identity.
+                // Name the group after its anchor, not the process encountered
+                // first; enumeration order is arbitrary.
                 const ProcessInfo& identity =
-                    root != snapshot.processes.size() ? snapshot.processes[root] : process;
+                    anchor_index != snapshot.processes.size() ? snapshot.processes[anchor_index] : process;
                 AppEntry app;
                 app.key = key;
                 app.package_family_name = identity.package_family_name;

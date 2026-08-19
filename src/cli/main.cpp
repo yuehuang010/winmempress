@@ -76,9 +76,10 @@ void Json(const memcore::Snapshot& snapshot, const std::vector<memcore::AppEntry
         const auto& app = apps[i];
         const std::wstring name = Escape(app.display_name);
         wprintf(L"{\"name\":\"%ls\",\"working_set\":%llu,\"commit\":%llu,"
-                 L"\"pressure\":%d,\"band\":\"%ls\"}", name.c_str(),
+                 L"\"gpu_shared\":%llu,\"pressure\":%d,\"band\":\"%ls\"}", name.c_str(),
                  static_cast<unsigned long long>(app.working_set),
-                 static_cast<unsigned long long>(app.commit), app.pressure.value,
+                 static_cast<unsigned long long>(app.commit),
+                 static_cast<unsigned long long>(app.gpu_shared), app.pressure.value,
                  memcore::PressureBandName(app.pressure.band));
     }
     wprintf(L"]}\n");
@@ -98,14 +99,16 @@ void Table(const memcore::Snapshot& snapshot, std::vector<memcore::AppEntry> app
              mempress::FormatMegabytes(snapshot.system.physical_total).c_str(),
              mempress::FormatMegabytes(snapshot.system.commit_total).c_str(),
              mempress::FormatMegabytes(snapshot.system.commit_limit).c_str());
-    wprintf(L"%-36ls %12ls %12ls %12ls\n", L"App", L"WorkingSet", L"Commit", L"Pressure");
-    wprintf(L"%ls\n", L"------------------------------------------------------------------------");
+    wprintf(L"%-36ls %12ls %12ls %12ls %12ls\n",
+             L"App", L"WorkingSet", L"Commit", L"GPU shared", L"Pressure");
+    wprintf(L"%ls\n", L"--------------------------------------------------------------------------------------");
     for (const auto& app : apps) {
         const std::wstring pressure = std::to_wstring(app.pressure.value) + L" (" +
                                       memcore::PressureBandName(app.pressure.band) + L")";
-        wprintf(L"%-36ls %12ls %12ls %12ls\n",
+        wprintf(L"%-36ls %12ls %12ls %12ls %12ls\n",
                 Truncate(app.display_name, 36).c_str(), mempress::FormatMegabytes(app.working_set).c_str(),
-                mempress::FormatMegabytes(app.commit).c_str(), pressure.c_str());
+                mempress::FormatMegabytes(app.commit).c_str(),
+                mempress::FormatMegabytes(app.gpu_shared).c_str(), pressure.c_str());
     }
 }
 bool Capture(memcore::MemPressEngine& engine, memcore::Snapshot& snapshot,

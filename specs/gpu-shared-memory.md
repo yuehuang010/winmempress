@@ -1,7 +1,7 @@
 # Spec: GPU shared-memory tracking
 
-Status: **draft — API choice undecided** (see Open decision). Do not implement until the
-decision is made.
+Status: **decided — use PDH.** The dedicated/shared split comes from documented
+counters (same source as Task Manager), so no segment classification is needed.
 
 ## Goal
 
@@ -19,7 +19,7 @@ The shared segment is ordinary system RAM, commit-charged to the owning process.
 Manager's "Shared GPU memory" column shows the same classification, so the OS has
 already done the dedicated/shared split — no heuristic needed.
 
-## Open decision: data source
+## Data source decision: PDH (comparison kept for the record)
 
 | | PDH (`\GPU Process Memory(pid_*)\Shared Usage`) | `D3DKMTQueryStatistics` (gdi32) |
 |---|---|---|
@@ -31,10 +31,25 @@ already done the dedicated/shared split — no heuristic needed.
 | Risk | Counter instance churn as processes start/exit (re-expand wildcard) | Struct-version drift across Windows releases |
 | Localization | Use `PdhAddEnglishCounter*` (never localized `PdhAddCounter`) | N/A |
 
-Leaning PDH for documentation and the free dedicated/shared split, but the decision is
-open. The design below is source-agnostic; only `collector` internals differ.
+Decision: **PDH**, for the documented counters and the free dedicated/shared split.
 
-## Design (either source)
+## PDH implementation requirements
+
+- Counter path: `\GPU Process Memory(pid_*)\Shared Usage` added with
+  `PdhAddEnglishCounterW` (never `PdhAddCounterW` — localized paths break on
+  non-English Windows). Never add `Dedicated Usage`.
+- One `PDH_HQUERY` owned by the collector, opened lazily on first snapshot;
+  `PdhCollectQueryData` once per tick, then
+  `PdhGetFormattedCounterArrayW(..., PDH_FMT_LARGE, ...)` to expand instances.
+- Instance names look like `pid_1234_luid_0x00000000_0x0000ABCD_phys_0`; parse the
+  PID after the `pid_` prefix and **sum across instances with the same PID**
+  (multi-adapter processes appear once per LUID).
+- The wildcard handles instance churn — no per-process counter management. If any
+  PDH call fails (counter set absent, remote session), close the query, leave all
+  `gpu_shared` at 0, and do not retry more than once per snapshot.
+- Link `pdh.lib` in `memcore` only; include `<pdh.h>` in `snapshot.cpp` only.
+
+## Design
 
 1. `ProcessInfo` gains `gpu_shared = 0` (bytes of shared-segment GPU usage).
 2. Collection runs in the existing snapshot pass in `src/core/snapshot.cpp`; no

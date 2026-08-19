@@ -11,7 +11,7 @@ struct PressureScore { int value = 0; PressureBand band = PressureBand::Low; };
 struct ProcessInfo {
     DWORD process_id = 0, parent_process_id = 0, session_id = 0;
     std::uint64_t create_time = 0, working_set = 0, working_set_shared = 0;
-    std::uint64_t commit = 0, hard_faults = 0;
+    std::uint64_t commit = 0, gpu_shared = 0, hard_faults = 0;
     std::wstring image_name, exe_path, package_family_name;
 };
 struct SystemStats {
@@ -26,7 +26,7 @@ struct Snapshot {
 };
 struct AppEntry {
     std::wstring key, display_name, exe_path, package_family_name;
-    std::uint64_t working_set = 0, commit = 0, hard_faults = 0;
+    std::uint64_t working_set = 0, commit = 0, gpu_shared = 0, hard_faults = 0;
     std::vector<DWORD> process_ids;
     PressureScore pressure;
 };

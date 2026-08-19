@@ -49,6 +49,7 @@ target_include_directories(memcore PUBLIC src/core)
 target_compile_definitions(memcore PUBLIC UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(memcore PRIVATE /W4 /permissive- /EHsc)
 target_link_libraries(memcore PUBLIC psapi shell32 version kernel32 user32)
+target_link_libraries(memcore PRIVATE pdh)
 
 add_executable(mempressmonitor-cli
     src/cli/main.cpp
@@ -80,3 +81,15 @@ target_compile_definitions(mempressmonitor PRIVATE
 target_compile_options(mempressmonitor PRIVATE /W4 /permissive- /EHsc)
 target_link_options(mempressmonitor PRIVATE /MANIFEST:NO)
 target_link_libraries(mempressmonitor PRIVATE memcore comctl32 dwmapi uxtheme)
+
+# Grouping test mocks — never packaged or published. mock-launcher.exe is a
+# windowless parent that spawns mock-ui.exe and mock-game.exe (one source, two
+# exes) to reproduce the launcher-plus-two-visible-apps pattern (Steam + game).
+foreach(mock_target IN ITEMS mock-ui mock-game)
+    add_executable(${mock_target} WIN32 src/test/mock-window.cpp)
+    target_compile_definitions(${mock_target} PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(${mock_target} PRIVATE /W4 /permissive- /EHsc)
+endforeach()
+add_executable(mock-launcher WIN32 src/test/mock-launcher.cpp)
+target_compile_definitions(mock-launcher PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(mock-launcher PRIVATE /W4 /permissive- /EHsc)

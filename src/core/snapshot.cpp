@@ -1,11 +1,15 @@
 #include "snapshot.h"
 #include <windows.h>
 #include <winternl.h>
+#include <pdh.h>
+#include <pdhmsg.h>
 #include <psapi.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cwchar>
+#include <limits>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -35,6 +39,89 @@ struct ProcessRecord {
 };
 using NtQueryFunction = LONG(NTAPI*)(ULONG, PVOID, ULONG, PULONG);
 using GetPackageFunction = LONG(WINAPI*)(HANDLE, UINT32*, PWSTR);
+
+bool ParseGpuPid(const wchar_t* name, DWORD& process_id) {
+    if (!name || wcsncmp(name, L"pid_", 4) != 0) return false;
+    const wchar_t* current = name + 4;
+    if (*current < L'0' || *current > L'9') return false;
+    std::uint64_t value = 0;
+    const std::uint64_t maximum = std::numeric_limits<DWORD>::max();
+    while (*current >= L'0' && *current <= L'9') {
+        const std::uint64_t digit = static_cast<std::uint64_t>(*current - L'0');
+        if (value > (maximum - digit) / 10U) return false;
+        value = value * 10U + digit;
+        ++current;
+    }
+    if (*current != L'_') return false;
+    process_id = static_cast<DWORD>(value);
+    return true;
+}
+
+class GpuSharedQuery {
+public:
+    GpuSharedQuery() = default;
+    ~GpuSharedQuery() { Close(); }
+    GpuSharedQuery(const GpuSharedQuery&) = delete;
+    GpuSharedQuery& operator=(const GpuSharedQuery&) = delete;
+
+    void Collect(std::vector<ProcessInfo>& processes) {
+        if (!query_ && !Open()) return;
+        if (PdhCollectQueryData(query_) != ERROR_SUCCESS) {
+            Close();
+            return;
+        }
+
+        DWORD buffer_size = 0;
+        DWORD item_count = 0;
+        PDH_STATUS status = PdhGetFormattedCounterArrayW(
+            counter_, PDH_FMT_LARGE, &buffer_size, &item_count, nullptr);
+        if (status == PDH_CSTATUS_NO_INSTANCE) return;
+        if (status != PDH_MORE_DATA || buffer_size == 0) {
+            Close();
+            return;
+        }
+
+        std::vector<BYTE> buffer(buffer_size);
+        auto* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(buffer.data());
+        status = PdhGetFormattedCounterArrayW(
+            counter_, PDH_FMT_LARGE, &buffer_size, &item_count, items);
+        if (status != ERROR_SUCCESS) {
+            Close();
+            return;
+        }
+
+        std::map<DWORD, std::uint64_t> shared_by_process;
+        for (DWORD i = 0; i < item_count; ++i) {
+            DWORD process_id = 0;
+            if (!ParseGpuPid(items[i].szName, process_id) || items[i].FmtValue.largeValue <= 0)
+                continue;
+            shared_by_process[process_id] +=
+                static_cast<std::uint64_t>(items[i].FmtValue.largeValue);
+        }
+        for (ProcessInfo& process : processes) {
+            const auto found = shared_by_process.find(process.process_id);
+            if (found != shared_by_process.end()) process.gpu_shared = found->second;
+        }
+    }
+
+private:
+    bool Open() {
+        if (PdhOpenQueryW(nullptr, 0, &query_) != ERROR_SUCCESS) return false;
+        constexpr wchar_t path[] = L"\\GPU Process Memory(pid_*)\\Shared Usage";
+        if (PdhAddEnglishCounterW(query_, path, 0, &counter_) == ERROR_SUCCESS) return true;
+        Close();
+        return false;
+    }
+
+    void Close() {
+        if (query_) PdhCloseQuery(query_);
+        query_ = nullptr;
+        counter_ = nullptr;
+    }
+
+    PDH_HQUERY query_ = nullptr;
+    PDH_HCOUNTER counter_ = nullptr;
+};
 
 class UniqueHandle {
 public:
@@ -186,6 +273,8 @@ bool CaptureSnapshot(Snapshot& snapshot, std::wstring& error_message) {
         }
         current += record->next_entry_offset;
     }
+    static GpuSharedQuery gpu_shared_query;
+    gpu_shared_query.Collect(snapshot.processes);
     ReadPerformance(snapshot.system);
     return true;
 }
