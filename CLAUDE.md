@@ -21,9 +21,12 @@ submission answers and listing copy. Assets come from
 CMake + MSVC (VS 18 Community installed). cmake.exe: `C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
 
 ```powershell
-cmake -S . -B build
-cmake --build build --config Release
+cmake -S . -B build-x64 -A x64
+cmake --build build-x64 --config Release
 ```
+
+`build-x64` is the single build tree, shared by `tools\publish.ps1` and
+`tools\package-msix.ps1` (which adds `build-arm64` for ARM packages).
 
 Version lives in the root `VERSION` file and flows into the exes, MSIX, and publish zip from there.
 

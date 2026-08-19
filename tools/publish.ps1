@@ -28,12 +28,15 @@ if ((git -C $repoRoot status --porcelain) | Where-Object { $_ }) {
     Write-Warning 'Working tree has uncommitted changes; artifact tagged as -dirty.'
 }
 
-& $cmake -S $repoRoot -B (Join-Path $repoRoot 'build')
+# Same build tree as package-msix.ps1 (build-<arch>), so the zip and the MSIX
+# always come from one set of binaries.
+$buildDir = Join-Path $repoRoot 'build-x64'
+& $cmake -S $repoRoot -B $buildDir -A x64
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
-& $cmake --build (Join-Path $repoRoot 'build') --config Release
+& $cmake --build $buildDir --config Release
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 
-$releaseDir = Join-Path $repoRoot 'build\Release'
+$releaseDir = Join-Path $buildDir 'Release'
 $stageName = "mempressmonitor-$version-$sha"
 $stageDir = Join-Path $repoRoot (Join-Path $OutputDir $stageName)
 if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
