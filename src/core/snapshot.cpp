@@ -124,6 +124,8 @@ void ReadPerformance(SystemStats& stats) {
         stats.commit_limit = static_cast<std::uint64_t>(info.CommitLimit) * page_size;
         stats.physical_total = static_cast<std::uint64_t>(info.PhysicalTotal) * page_size;
         stats.physical_available = static_cast<std::uint64_t>(info.PhysicalAvailable) * page_size;
+        stats.kernel_paged_pool = static_cast<std::uint64_t>(info.KernelPaged) * page_size;
+        stats.kernel_nonpaged_pool = static_cast<std::uint64_t>(info.KernelNonpaged) * page_size;
     } else {
         MEMORYSTATUSEX memory{};
         memory.dwLength = sizeof(memory);
@@ -157,9 +159,17 @@ bool CaptureSnapshot(Snapshot& snapshot, std::wstring& error_message) {
             static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(record->parent_process_id));
         process.session_id = record->session_id;
         process.create_time = static_cast<std::uint64_t>(record->create_time.QuadPart);
-        process.working_set = record->working_set_private_size.QuadPart > 0
-            ? static_cast<std::uint64_t>(record->working_set_private_size.QuadPart)
-            : static_cast<std::uint64_t>(record->working_set_size);
+        const auto full_working_set = static_cast<std::uint64_t>(record->working_set_size);
+        if (record->working_set_private_size.QuadPart > 0) {
+            process.working_set =
+                static_cast<std::uint64_t>(record->working_set_private_size.QuadPart);
+            process.working_set_shared = full_working_set > process.working_set
+                ? full_working_set - process.working_set : 0;
+        } else {
+            // Private size unavailable: working_set already holds the full set,
+            // so no shared portion may be added on top of it.
+            process.working_set = full_working_set;
+        }
         process.commit = static_cast<std::uint64_t>(record->pagefile_usage);
         process.hard_faults = record->hard_fault_count;
         process.image_name = ToString(record->image_name);

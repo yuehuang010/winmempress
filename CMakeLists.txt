@@ -52,6 +52,7 @@ target_link_libraries(memcore PUBLIC psapi shell32 version kernel32 user32)
 
 add_executable(mempressmonitor-cli
     src/cli/main.cpp
+    src/common/format.h
     src/common/version.rc
     src/common/version.h
 )
@@ -66,10 +67,12 @@ target_link_libraries(mempressmonitor-cli PRIVATE memcore)
 add_executable(mempressmonitor WIN32
     src/gui/main.cpp
     src/gui/app.rc
+    src/common/format.h
     src/common/version.rc
     src/common/version.h
     src/gui/resource.h
 )
+target_include_directories(mempressmonitor PRIVATE src/common)
 target_compile_definitions(mempressmonitor PRIVATE
     UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
     ${MEMPRESS_VERSION_DEFINITIONS}

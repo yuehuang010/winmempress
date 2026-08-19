@@ -1,3 +1,4 @@
+#include "format.h"
 #include "grouper.h"
 #include "pressure.h"
 #include "snapshot.h"
@@ -22,22 +23,6 @@ BOOL WINAPI ConsoleHandler(DWORD type) {
         return TRUE;
     }
     return FALSE;
-}
-std::wstring Bytes(std::uint64_t value) {
-    std::wostringstream out;
-    if (value >= 1024ULL * 1024ULL * 1024ULL) {
-        out << std::fixed << std::setprecision(1)
-            << static_cast<double>(value) / (1024.0 * 1024.0 * 1024.0) << L" GB";
-    } else if (value >= 1024ULL * 1024ULL) {
-        out << std::fixed << std::setprecision(0)
-            << static_cast<double>(value) / (1024.0 * 1024.0) << L" MB";
-    } else if (value >= 1024ULL) {
-        out << std::fixed << std::setprecision(0)
-            << static_cast<double>(value) / 1024.0 << L" KB";
-    } else {
-        out << value << L" B";
-    }
-    return out.str();
 }
 std::wstring Truncate(std::wstring value, std::size_t width) {
     if (value.size() <= width) return value;
@@ -77,12 +62,15 @@ void Help() {
 void Json(const memcore::Snapshot& snapshot, const std::vector<memcore::AppEntry>& apps,
           const memcore::PressureScore& system) {
     wprintf(L"{\"system\":{\"score\":%d,\"band\":\"%ls\",\"physical_total\":%llu,"
-             L"\"physical_available\":%llu,\"commit_total\":%llu,\"commit_limit\":%llu},"
+             L"\"physical_available\":%llu,\"commit_total\":%llu,\"commit_limit\":%llu,"
+             L"\"kernel_paged_pool\":%llu,\"kernel_nonpaged_pool\":%llu},"
              L"\"apps\":[", system.value, memcore::PressureBandName(system.band),
              static_cast<unsigned long long>(snapshot.system.physical_total),
              static_cast<unsigned long long>(snapshot.system.physical_available),
              static_cast<unsigned long long>(snapshot.system.commit_total),
-             static_cast<unsigned long long>(snapshot.system.commit_limit));
+             static_cast<unsigned long long>(snapshot.system.commit_limit),
+             static_cast<unsigned long long>(snapshot.system.kernel_paged_pool),
+             static_cast<unsigned long long>(snapshot.system.kernel_nonpaged_pool));
     for (std::size_t i = 0; i < apps.size(); ++i) {
         if (i) wprintf(L",");
         const auto& app = apps[i];
@@ -106,18 +94,18 @@ void Table(const memcore::Snapshot& snapshot, std::vector<memcore::AppEntry> app
     });
     wprintf(L"System pressure: %d/100 (%ls) | RAM %ls available / %ls | Commit %ls / %ls\n",
              system.value, memcore::PressureBandName(system.band),
-             Bytes(snapshot.system.physical_available).c_str(),
-             Bytes(snapshot.system.physical_total).c_str(),
-             Bytes(snapshot.system.commit_total).c_str(),
-             Bytes(snapshot.system.commit_limit).c_str());
+             mempress::FormatMegabytes(snapshot.system.physical_available).c_str(),
+             mempress::FormatMegabytes(snapshot.system.physical_total).c_str(),
+             mempress::FormatMegabytes(snapshot.system.commit_total).c_str(),
+             mempress::FormatMegabytes(snapshot.system.commit_limit).c_str());
     wprintf(L"%-36ls %12ls %12ls %12ls\n", L"App", L"WorkingSet", L"Commit", L"Pressure");
     wprintf(L"%ls\n", L"------------------------------------------------------------------------");
     for (const auto& app : apps) {
         const std::wstring pressure = std::to_wstring(app.pressure.value) + L" (" +
                                       memcore::PressureBandName(app.pressure.band) + L")";
         wprintf(L"%-36ls %12ls %12ls %12ls\n",
-                Truncate(app.display_name, 36).c_str(), Bytes(app.working_set).c_str(),
-                Bytes(app.commit).c_str(), pressure.c_str());
+                Truncate(app.display_name, 36).c_str(), mempress::FormatMegabytes(app.working_set).c_str(),
+                mempress::FormatMegabytes(app.commit).c_str(), pressure.c_str());
     }
 }
 bool Capture(memcore::MemPressEngine& engine, memcore::Snapshot& snapshot,

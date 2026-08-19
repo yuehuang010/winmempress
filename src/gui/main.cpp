@@ -1,4 +1,5 @@
 #include "resource.h"
+#include "format.h"
 #include "grouper.h"
 #include "pressure.h"
 #include "snapshot.h"
@@ -61,18 +62,6 @@ struct DialogState {
     int fallback_image = -1;
     std::map<std::wstring, int> icon_cache;
 };
-
-std::wstring FormatMemory(std::uint64_t bytes) {
-    std::wostringstream output;
-    if (bytes >= 1024ULL * 1024ULL * 1024ULL) {
-        output << std::fixed << std::setprecision(1)
-               << static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0) << L" GB";
-    } else {
-        output << std::fixed << std::setprecision(0)
-               << static_cast<double>(bytes) / (1024.0 * 1024.0) << L" MB";
-    }
-    return output.str();
-}
 
 bool IsDarkTheme() {
     HKEY key = nullptr;
@@ -325,7 +314,7 @@ void UpdateList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> 
 
     for (int index = 0; index < std::min(old_count, new_count); ++index) {
         const auto& app = state.apps[static_cast<std::size_t>(index)];
-        const std::wstring memory = FormatMemory(app.working_set);
+        const std::wstring memory = mempress::FormatMegabytes(app.working_set);
         const std::wstring pressure = std::to_wstring(app.pressure.value) + L"%";
         const int image = ImageIndexForApp(state, app.exe_path);
         const RenderedRow row{app.display_name, memory, pressure, image};
@@ -366,7 +355,7 @@ void UpdateList(HWND dialog, DialogState& state, std::vector<memcore::AppEntry> 
         item.pszText = const_cast<LPWSTR>(app.display_name.c_str());
         ListView_InsertItem(state.list, &item);
 
-        const std::wstring memory = FormatMemory(app.working_set);
+        const std::wstring memory = mempress::FormatMegabytes(app.working_set);
         ListView_SetItemText(state.list, index, 1, const_cast<LPWSTR>(memory.c_str()));
         const std::wstring pressure = std::to_wstring(app.pressure.value) + L"%";
         ListView_SetItemText(state.list, index, 2, const_cast<LPWSTR>(pressure.c_str()));

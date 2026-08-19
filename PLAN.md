@@ -53,11 +53,13 @@ Snapshot every ~2s via `NtQuerySystemInformation(SystemProcessInformation)` in o
 Mimic Task Manager's Apps view:
 
 1. **Packaged apps (UWP/MSIX):** group by package family name (`GetPackageFamilyName` on the process handle). One row per package.
-2. **Desktop apps:** a process is an *app root* if it owns a visible, unowned top-level window (`EnumWindows` + `GetWindowThreadProcessId` + `IsWindowVisible` + no owner). All descendants via the parent-PID chain fold into the root (so Chrome/Edge/Teams child processes merge into one row). Guard against PID reuse by checking process start times when walking parents.
+2. **Desktop apps:** a process tree qualifies as an app if any process in it owns a visible, unowned top-level window (`EnumWindows` + `GetWindowThreadProcessId` + `IsWindowVisible` + no owner). The *app root* is the topmost ancestor below `explorer.exe` — not the first windowed process found — so helper processes with their own windows (e.g. `steamwebhelper.exe` under `steam.exe`) fold into one row instead of splitting the tree. Guard against PID reuse by checking process start times when walking parents.
 3. **Same-exe merge:** roots with identical exe paths merge (multiple Notepad windows = one "Notepad" row).
-4. **Everything else** (services, background processes) collapses into one "Background & system" row so totals still add up.
+4. **Everything else** (services, background processes) collapses into one "Background & OS" row so totals still add up. Kernel pool (paged + non-paged, from `GetPerformanceInfo`) is charged to this row too — it belongs to no process, and folding it in keeps e.g. a leaking driver visible. Because of this fold, per-process pool quotas must never be surfaced as columns (double count).
 
 App identity for display: exe `FileDescription` (fallback: exe name), icon extracted from the exe / package logo.
+
+**Shared memory amortization.** A per-app row's memory is Σ private working set plus, per distinct exe path in the group, the *largest* shared working set (`working_set_size − working_set_private_size`) among that exe's processes. Rationale: same-exe siblings (Chromium-style helpers) map the same images, so their shared pages overlap almost entirely — summing shared double-counts, ignoring it hides framework DLLs. The goal is a ballpark app footprint, not an exact number; system DLLs counted once per app are accepted as rounding error. Commit is *not* amortized: shared code charges no commit, so Σ private commit is already exact. All inputs come from the single `NtQuerySystemInformation` pass — no per-process handle opening for this.
 
 ### 3. Memory pressure heuristic
 
